@@ -1,0 +1,11 @@
+# 第一关：10 个"空耳"技术词。格式：目标文本 | 发音提示（可省略）
+Claude Code | /klɔːd kəʊd/ 不要读成 cow coat / call coat；/ɔː/ 长音，/əʊ/ 饱满，词尾浊音 /d/
+Anthropic | /ænˈθrɒpɪk/ 首音节 /æn/ 不吞，/θ/ 咬舌吹气，重音在 THRO
+Type-C cable | /taɪp siː ˈkeɪbəl/ 不要读成 top C capper；/aɪ/ /eɪ/ 要滑向 /ɪ/
+hardware | /ˈhɑːdweər/ 不要读成 hot wheel；/hɑːd/ 尾音浊 /d/，后半 /weər/
+token usage | /ˈtəʊkən ˈjuːsɪdʒ/ 不要读成 talking use age；usage 重音在第一音节
+created | /kriˈeɪtɪd/ 不要读成 credit；/eɪ/ 拉长，重音在第二音节
+repo | /ˈriːpəʊ/ 不要读成 ripple；/iː/ 长音，尾音 /əʊ/
+format | /ˈfɔːmæt/ 不要读成 for March；重音在 FOR，尾音清脆 /t/
+ADB | /ˌeɪ diː ˈbiː/ 不要读成 ATP；D、B 声带振动
+command by command | /kəˈmɑːnd baɪ kəˈmɑːnd/ 重音在 MAND，/n/ 后紧跟 /d/

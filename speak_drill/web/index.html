@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Speak Drill</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e4e2dc;
+  --accent: #2f6fde; --ok: #1f9d55; --bad: #d64545; --warn: #c27c0e; --rec: #e5484d;
+  --ok-bg: #e7f6ed; --bad-bg: #fdecec; --chip: #f0efeb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618; --panel: #1f1f22; --text: #ececee; --muted: #9a9aa0; --line: #2e2e33;
+    --accent: #5b8cff; --ok: #3ccf7a; --bad: #ff6b6b; --warn: #f0a52b; --rec: #ff5c61;
+    --ok-bg: #173324; --bad-bg: #3a1d1f; --chip: #2a2a2f;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.55 -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+.app { display: grid; grid-template-columns: 280px 1fr; min-height: 100vh; }
+aside { border-right: 1px solid var(--line); background: var(--panel); padding: 16px; overflow-y: auto; max-height: 100vh; position: sticky; top: 0; }
+aside h1 { font-size: 17px; margin: 0 0 12px; }
+select, input[type=text], textarea { width: 100%; font: inherit; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; }
+.items { list-style: none; padding: 0; margin: 12px 0; }
+.items li { display: flex; gap: 8px; align-items: center; padding: 7px 9px; border-radius: 8px; cursor: pointer; }
+.items li:hover { background: var(--chip); }
+.items li.active { background: var(--accent); color: #fff; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+.dot.pass { background: var(--ok); } .dot.fail { background: var(--bad); } .dot.trying { background: var(--warn); }
+.side-sec { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.side-sec label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.row { display: flex; gap: 8px; align-items: center; }
+.small { font-size: 12px; color: var(--muted); }
+main { padding: 32px clamp(16px, 4vw, 56px); max-width: 920px; width: 100%; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+.progress { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
+.target { font-size: clamp(26px, 4vw, 40px); font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+.hint { color: var(--muted); margin-top: 10px; }
+.controls { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; align-items: center; }
+button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--accent); }
+button:disabled { opacity: .45; cursor: default; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.rec-btn { width: 76px; height: 76px; border-radius: 50%; padding: 0; font-size: 28px;
+  background: var(--rec); color: #fff; border: none; box-shadow: 0 4px 14px color-mix(in srgb, var(--rec) 40%, transparent); }
+.rec-btn.recording { animation: pulse 1.1s infinite; border-radius: 22px; }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+.kbd { font-size: 12px; color: var(--muted); }
+.kbd b { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-weight: 500; }
+.status { margin-top: 18px; min-height: 24px; color: var(--muted); }
+.tries { display: flex; gap: 6px; margin-left: auto; }
+.tries span { width: 26px; height: 6px; border-radius: 3px; background: var(--line); }
+.tries span.pass { background: var(--ok); } .tries span.fail { background: var(--bad); }
+.attempts { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+.attempt { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.attempt.ok { background: var(--ok-bg); border-color: transparent; }
+.attempt.bad { background: var(--bad-bg); border-color: transparent; }
+.attempt .head { display: flex; gap: 10px; align-items: center; font-size: 13px; color: var(--muted); }
+.attempt .heard { margin-top: 4px; font-size: 16px; }
+.diff { margin-top: 6px; font-size: 16px; }
+.diff .w { color: var(--bad); font-weight: 600; text-decoration: line-through; text-decoration-thickness: 1px; }
+.diff .g { color: var(--bad); }
+.diff .arrow { color: var(--muted); margin: 0 3px; }
+.analysis { margin-top: 22px; border-top: 1px solid var(--line); padding-top: 16px; }
+.analysis h3 { margin: 0 0 6px; font-size: 15px; }
+.md h1, .md h2, .md h3 { font-size: 16px; margin: 14px 0 6px; }
+.md ul { padding-left: 20px; } .md code { background: var(--chip); border-radius: 4px; padding: 1px 4px; }
+.md hr { border: 0; border-top: 1px solid var(--line); }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent);
+  border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.err { color: var(--bad); }
+main { display: grid; gap: 20px; align-content: start; }
+@media (min-width: 1280px) {
+  main { max-width: 1340px; grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
+  .art { position: sticky; top: 32px; max-height: calc(100vh - 64px); overflow-y: auto; }
+}
+.ipa { font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", -apple-system, "Lucida Grande", sans-serif; }
+.art { padding: 20px; container-type: inline-size; }
+.art-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.art-head h3 { margin: 0; font-size: 15px; }
+.art-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 12px; }
+@container (min-width: 600px) { .art-body { grid-template-columns: 300px minmax(0, 1fr); align-items: start; } }
+.art-stage { position: relative; aspect-ratio: 1; background: #1a1a1a; border-radius: 12px; overflow: hidden; }
+.art-stage video { width: 100%; height: 100%; object-fit: contain; display: block; cursor: pointer; }
+.art-badge { position: absolute; left: 8px; bottom: 8px; font-size: 12px; color: #fff; background: rgba(0,0,0,.6);
+  border-radius: 6px; padding: 1px 7px; pointer-events: none; }
+.art-badge:empty { display: none; }
+.art-now { display: flex; gap: 12px; align-items: flex-start; min-height: 64px; }
+.art-sym { font-size: 34px; font-weight: 600; min-width: 52px; text-align: center; line-height: 1.15; }
+.art-name { font-size: 13px; color: var(--muted); }
+.art-tip { margin-top: 2px; }
+.art-steps { font-size: 13px; color: var(--muted); margin-top: 4px; }
+.art-steps b { color: var(--accent); }
+.art-approx { font-size: 12px; color: var(--warn); margin-top: 4px; }
+.art-words { display: flex; flex-wrap: wrap; gap: 6px 8px; margin-top: 14px; }
+.art-word { padding: 5px 6px; border-radius: 10px; border: 1px solid transparent; }
+.art-word.bad { border-color: color-mix(in srgb, var(--bad) 50%, transparent); background: var(--bad-bg); }
+.art-wlabel { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.art-word.bad .art-wlabel { color: var(--bad); }
+.art-wlabel[data-start] { cursor: pointer; }
+.art-wlabel[data-start]:hover { color: var(--accent); }
+.art-phones { display: flex; flex-wrap: wrap; gap: 3px; }
+.ph { padding: 2px 7px; min-width: 30px; border-radius: 7px; font-size: 17px; line-height: 1.5; }
+.ph.vowel { background: var(--chip); }
+.ph.stress { box-shadow: inset 0 -2px 0 var(--warn); }
+.ph.now { background: var(--accent); border-color: var(--accent); color: #fff; }
+.art-ctl { margin-top: 14px; flex-wrap: wrap; }
+.art-ctl button { padding: 7px 12px; }
+.art-ctl select { width: auto; }
+.art-ctl label { font-size: 13px; color: var(--muted); display: flex; gap: 4px; align-items: center; }
+.art-credit { margin: 14px 0 0; }
+.art-credit a { color: inherit; }
+@media (max-width: 760px) {
+  .app { grid-template-columns: 1fr; }
+  aside { position: static; max-height: none; border-right: 0; border-bottom: 1px solid var(--line); }
+  .card { padding: 20px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <h1>🎙 Speak Drill</h1>
+    <select id="drillSel"></select>
+    <ul class="items" id="items"></ul>
+
+    <div class="side-sec">
+      <label>自由练习：输入任意句子</label>
+      <textarea id="freeText" rows="3" placeholder="e.g. I would check the AI agent's commands one by one."></textarea>
+      <button id="freeGo" style="margin-top:8px;width:100%">练这句</button>
+    </div>
+
+    <div class="side-sec">
+      <label>领读语速：<span id="rateVal">150</span> 词/分钟</label>
+      <input type="range" id="rate" min="90" max="220" step="10" value="150" style="width:100%">
+      <label style="margin-top:10px">每条最多尝试</label>
+      <div class="row"><input type="text" id="maxTries" value="3" style="width:60px"> <span class="small" id="maxTriesNote">次没读对就送去分析</span></div>
+      <p class="small" id="session"></p>
+    </div>
+  </aside>
+
+  <main>
+    <div class="card">
+      <div class="row"><div class="progress" id="progress"></div>
+        <div class="tries" id="tries"></div></div>
+      <div class="target" id="target">加载中…</div>
+      <div class="hint" id="hint"></div>
+
+      <div class="controls">
+        <button class="rec-btn" id="recBtn" title="开始 / 结束录音（空格）">●</button>
+        <button id="listenBtn">🔊 听一遍</button>
+        <button id="myBtn" disabled>▶ 听我读的</button>
+        <button id="prevBtn">← 上一条</button>
+        <button id="nextBtn">下一条 →</button>
+      </div>
+      <div class="kbd" style="margin-top:10px">
+        <b>空格</b> 录音/结束 · <b>L</b> 听一遍 · <b>M</b> 听我读的 · <b>P</b> 口型连播 · <b>←</b><b>→</b> 切换
+      </div>
+      <div class="status" id="status"></div>
+      <div class="attempts" id="attempts"></div>
+      <div class="analysis" id="analysis" hidden></div>
+    </div>
+
+    <section class="card art">
+      <div class="art-head"><h3>发音动画</h3><span class="small" id="artSrc"></span></div>
+      <div class="art-body">
+        <div class="art-stage">
+          <video id="artVideo" playsinline preload="auto" title="点一下重播这个音"></video>
+          <span class="art-badge" id="artBadge"></span>
+        </div>
+        <div>
+          <div class="art-now" id="artNow"></div>
+          <div class="row art-ctl">
+            <button id="artAll">▶ 连播全部</button>
+            <select id="artSpeed">
+              <option value="0.5">0.5×</option><option value="0.75">0.75×</option>
+              <option value="1" selected>1×</option><option value="1.5">1.5×</option>
+            </select>
+            <label><input type="checkbox" id="artSound" checked> 声音</label>
+            <label title="接着放 əCə、VpV、VtV 这些例子"><input type="checkbox" id="artFull"> 完整示范</label>
+          </div>
+          <div class="art-words" id="artWords"></div>
+          <p class="small art-credit">点音标看口型，点单词连播这个词。默认只放单独发音那一下，勾「完整示范」会接着放 əCə、VpV 这些例子。
+            底色是元音：真人 MRI，是语音学家发的标准元音，带扫描仪噪音，和英语里的实际元音略有差别。橙色下划线是重读。
+            动画与 MRI 来自 <a href="https://www.seeingspeech.ac.uk/" target="_blank" rel="noopener">Seeing Speech</a>
+            （University of Glasgow / Strathclyde，CC BY-NC-ND 4.0）。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+let drills = [];
+let list = [];          // 当前练习的条目 [{target, hint}]
+let idx = 0;
+const state = new Map(); // target -> {attempts:[], status, analysis, analyzing, error}
+let recorder = null, chunks = [], lastBlobUrl = null, busy = false;
+let analyzeOn = true;    // 服务端没配置 AI 分析时为 false
+
+function st(item) {
+  if (!state.has(item.target)) state.set(item.target, { attempts: [], status: "", analysis: "", analyzing: false });
+  return state.get(item.target);
+}
+const maxTries = () => Math.max(1, parseInt($("maxTries").value) || 3);
+const rate = () => $("rate").value;
+
+async function init() {
+  try { $("rate").value = localStorage.getItem("rate") || 150; } catch {}
+  $("rateVal").textContent = rate();
+  const r = await fetch("/api/drills").then((r) => r.json());
+  drills = r.drills;
+  analyzeOn = r.analyze !== false;
+  if (!analyzeOn) $("maxTriesNote").textContent = "次（没配置 AI 分析，只做识别比对）";
+  $("session").textContent = "录音保存在 " + r.session;
+  $("drillSel").innerHTML = drills.map((d, i) => `<option value="${i}">${esc(d.name)}（${d.items.length} 条）</option>`).join("");
+  pickDrill(0);
+}
+
+function pickDrill(i) {
+  list = drills[i]?.items || [];
+  idx = 0;
+  renderList();
+  render(true);
+}
+
+function renderList() {
+  $("items").innerHTML = list.map((it, i) => {
+    const s = st(it);
+    const cls = s.status || (s.attempts.length ? "trying" : "");
+    return `<li class="${i === idx ? "active" : ""}" data-i="${i}"><span class="dot ${cls}"></span>${esc(it.target)}</li>`;
+  }).join("");
+}
+
+function render(speak = false) {
+  const it = list[idx];
+  if (!it) { $("target").textContent = "没有练习条目"; return; }
+  const s = st(it);
+  $("progress").textContent = `第 ${idx + 1} / ${list.length} 条`;
+  $("target").textContent = it.target;
+  $("hint").textContent = it.hint || "";
+  $("tries").innerHTML = Array.from({ length: maxTries() }, (_, i) => {
+    const a = s.attempts[i];
+    return `<span class="${a ? (a.ok ? "pass" : "fail") : ""}"></span>`;
+  }).join("");
+
+  $("attempts").innerHTML = s.attempts.map((a, i) => `
+    <div class="attempt ${a.ok ? "ok" : "bad"}">
+      <div class="head">第 ${i + 1} 次 · ${a.ok ? "✔ 通过" : `✘ 词错率 ${Math.round(a.wer * 100)}%`}</div>
+      <div class="heard">识别为：“${esc(a.heard || "（没听到）")}”</div>
+      ${a.ok ? "" : `<div class="diff">${diffHtml(a.ops)}</div>`}
+    </div>`).join("");
+
+  const an = $("analysis");
+  if (s.analyzing) {
+    an.hidden = false;
+    an.innerHTML = `<h3>发音分析</h3><div><span class="spinner"></span>已把录音发给 Gemini 分析，大约 20 秒…</div>`;
+  } else if (s.analysis) {
+    an.hidden = false;
+    const html = window.marked ? marked.parse(esc(s.analysis)) : `<pre style="white-space:pre-wrap">${esc(s.analysis)}</pre>`;
+    an.innerHTML = `<h3>发音分析</h3><div class="md">${html}</div>`;
+  } else if (s.error) {
+    an.hidden = false;
+    an.innerHTML = `<h3>发音分析</h3><div class="err">${esc(s.error)}</div> <button onclick="runAnalysis()">重试</button>`;
+  } else {
+    an.hidden = true;
+  }
+
+  const done = s.status === "pass" || s.attempts.length >= maxTries();
+  $("recBtn").disabled = busy;
+  if (!recorder) {
+    $("status").innerHTML = s.status === "pass" ? `<span style="color:var(--ok)">读对了！按 → 进下一条</span>`
+      : done ? "已用完尝试次数，可以按空格继续练（不再计数）"
+      : "按空格或红色按钮开始录音，读完再按一次。";
+  }
+  renderList();
+  loadArt(it);
+  if (speak) listen();
+}
+
+function diffHtml(ops) {
+  return ops.map((o) => o.op === "equal" ? esc(o.want)
+    : `<span class="w">${esc(o.want || "∅")}</span><span class="arrow">→</span><span class="g">${esc(o.got || "∅")}</span>`
+  ).join(" ");
+}
+
+let player = new Audio();
+async function listen() {
+  const it = list[idx];
+  if (!it) return;
+  player.pause();
+  artStop();
+  player = new Audio(`/api/tts?rate=${rate()}&text=${encodeURIComponent(it.target)}`);
+  player.play().catch(() => {}); // 首次打开页面浏览器可能拦自动播放，点按钮即可
+}
+
+async function toggleRec() {
+  if (busy) return;
+  if (recorder) { recorder.stop(); return; }
+  player.pause();
+  artStop();
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">拿不到麦克风：${esc(e.message)}。请在浏览器地址栏允许麦克风。</span>`;
+    return;
+  }
+  chunks = [];
+  recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  recorder.onstop = () => {
+    stream.getTracks().forEach((t) => t.stop());
+    recorder = null;
+    $("recBtn").classList.remove("recording");
+    $("recBtn").textContent = "●";
+    submit(new Blob(chunks, { type: "audio/webm" }));
+  };
+  recorder.start();
+  $("recBtn").classList.add("recording");
+  $("recBtn").textContent = "■";
+  const t0 = Date.now();
+  const tick = () => {
+    if (!recorder) return;
+    $("status").innerHTML = `<span style="color:var(--rec)">● 录音中 ${((Date.now() - t0) / 1000).toFixed(1)}s</span> — 读完按空格结束`;
+    requestAnimationFrame(tick);
+  };
+  tick();
+}
+
+async function submit(blob) {
+  const it = list[idx], s = st(it), myIdx = idx;
+  if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
+  lastBlobUrl = URL.createObjectURL(blob);
+  $("myBtn").disabled = false;
+  busy = true;
+  $("recBtn").disabled = true;
+  $("status").innerHTML = `<span class="spinner"></span>识别中…`;
+  try {
+    const r = await fetch(`/api/check?target=${encodeURIComponent(it.target)}`, { method: "POST", body: blob });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    const counted = s.status !== "pass" && s.attempts.length < maxTries();
+    if (counted) s.attempts.push(d);
+    else s.attempts.splice(s.attempts.length - 1, 1, d); // 次数用完后的练习只显示最新一次
+    if (d.ok && s.status !== "fail") s.status = "pass";
+    else if (counted && s.attempts.length >= maxTries() && !d.ok) {
+      s.status = "fail";
+      busy = false;
+      if (idx === myIdx) render();
+      if (analyzeOn) runAnalysis(it);
+      return;
+    }
+  } catch (e) {
+    $("status").innerHTML = `<span class="err">识别失败：${esc(e.message)}</span>`;
+    busy = false;
+    $("recBtn").disabled = false;
+    return;
+  }
+  busy = false;
+  if (idx === myIdx) render();
+}
+
+async function runAnalysis(it = list[idx]) {
+  const s = st(it);
+  const last = s.attempts[s.attempts.length - 1];
+  s.analyzing = true; s.error = "";
+  render();
+  try {
+    const r = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wav: last.wav, target: it.target, hint: it.hint || "", attempts: s.attempts.map((a) => a.heard) }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error);
+    s.analysis = d.reply;
+  } catch (e) {
+    s.error = "分析失败：" + e.message;
+  }
+  s.analyzing = false;
+  if (list[idx] === it) render(); else renderList();
+}
+
+// ---- 发音动画：每个音素放 Seeing Speech 的侧剖面动画（辅音）/ 真人 MRI（元音） ----
+const artVideo = $("artVideo");
+const art = { key: "", data: null, seq: [], cur: -1, queue: [], all: false, end: -1, stopAt: null, clipId: 0, doneId: -1 };
+const artSpeed = () => +$("artSpeed").value;
+
+async function loadArt(it) {
+  const key = it.target + "\n" + (it.hint || "");
+  if (art.key === key) { markArtWords(); return; }
+  art.key = key;
+  artStop();
+  art.data = null; art.seq = []; art.cur = -1;
+  artVideo.removeAttribute("src"); artVideo.load();
+  $("artBadge").textContent = ""; $("artNow").innerHTML = ""; $("artSrc").textContent = "";
+  $("artWords").innerHTML = `<span class="small"><span class="spinner"></span>拆音素…</span>`;
+  try {
+    const q = `text=${encodeURIComponent(it.target)}&hint=${encodeURIComponent(it.hint || "")}`;
+    const d = await fetch(`/api/phonemes?${q}`).then((r) => r.json());
+    if (d.error) throw new Error(d.error);
+    if (art.key !== key) return;
+    art.data = d;
+    art.seq = d.words.flatMap((w) => w.phones);
+    renderArt();
+    if (art.seq.length) artSelect(0, false);
+  } catch (e) {
+    if (art.key === key) $("artWords").innerHTML = `<span class="err">拆音素失败：${esc(e.message)}</span>`;
+  }
+}
+
+function renderArt() {
+  const d = art.data, src = new Set(d.words.map((w) => w.source));
+  $("artSrc").textContent = src.has("cmu") ? (src.has("hint") ? "音标：提示 + CMU 词典（美式）" : "音标：CMU 词典（美式）") : "音标：来自提示";
+  let n = 0;
+  $("artWords").innerHTML = d.words.map((w, wi) => {
+    const start = n;
+    const chips = w.phones.map((p) => {
+      const info = d.phones[p.key];
+      return `<button class="ph ipa${info.vowel ? " vowel" : ""}${p.stress === 1 ? " stress" : ""}" data-i="${n++}" title="${esc(info.zh)}">${esc(p.sym)}</button>`;
+    }).join("");
+    const range = chips ? ` data-start="${start}" data-end="${n - 1}" title="连播这个词"` : "";
+    return `
+    <div class="art-word" data-wi="${wi}">
+      <div class="art-wlabel"${range}>${esc(w.text)}${w.ipa ? ` <span class="ipa">/${esc(w.ipa)}/</span>` : ""}</div>
+      <div class="art-phones">${chips || `<span class="small">词典里没有这个词</span>`}</div>
+    </div>`;
+  }).join("");
+  markArtWords();
+}
+
+// 最近一次没读对的词，在音素区标红
+function markArtWords() {
+  if (!art.data) return;
+  const s = st(list[idx]), last = s.attempts[s.attempts.length - 1];
+  const bad = new Set(last && !last.ok ? last.ops.filter((o) => o.op === "wrong").flatMap((o) => o.want.split(" ")).filter(Boolean) : []);
+  document.querySelectorAll(".art-word").forEach((el) => {
+    el.classList.toggle("bad", art.data.words[+el.dataset.wi].norm.some((x) => bad.has(x)));
+  });
+}
+
+function artSelect(i, play = true) {
+  const p = art.seq[i];
+  if (!p) return;
+  art.cur = i;
+  art.queue = art.data.phones[p.key].clips.slice();
+  document.querySelectorAll(".ph").forEach((b) => b.classList.toggle("now", +b.dataset.i === i));
+  artNextClip(play);
+}
+
+function artNextClip(play) {
+  const p = art.seq[art.cur], info = art.data.phones[p.key];
+  const ref = art.queue.shift(), step = info.clips.length - art.queue.length - 1, clip = art.data.clips[ref];
+  const steps = info.clips.length > 1
+    ? `<div class="art-steps">口型：${info.clips.map((r, k) => k === step ? `<b>[${esc(art.data.clips[r].sym)}]</b>` : `[${esc(art.data.clips[r].sym)}]`).join(" → ")}</div>` : "";
+  $("artNow").innerHTML = `
+    <div class="art-sym ipa">${esc(p.sym)}</div>
+    <div>
+      <div class="art-name">${esc(info.zh)}${info.clips.length === 1 ? ` · ${esc(clip.en)}` : ""}</div>
+      <div class="art-tip">${esc(info.tip)}</div>
+      ${steps}
+      ${info.approx ? `<div class="art-approx">${esc(info.approx)}</div>` : ""}
+    </div>`;
+  // 每段视频是一整套示范（元音 V、VpV、VtV；辅音 C、əCə），默认只放单独发音那一下
+  const full = $("artFull").checked, win = !full && clip.window;
+  $("artBadge").textContent = full ? clip.full : clip.short;
+  art.clipId++;
+  art.stopAt = win ? win[1] : null;
+  artVideo.src = `/api/articulation/${ref}.mp4` + (win ? `#t=${win[0]},${win[1]}` : "");
+  artVideo.defaultPlaybackRate = artVideo.playbackRate = artSpeed();
+  artVideo.muted = !$("artSound").checked;
+  if (play) artVideo.play().catch(() => {});
+}
+
+// 一段放完：到片段终点浏览器会暂停（pause），放到文件末尾是 ended，两者可能都触发
+function artClipDone() {
+  if (art.doneId === art.clipId) return;
+  art.doneId = art.clipId;
+  if (art.queue.length) return artNextClip(true);
+  if (art.all && art.cur < art.end) return artSelect(art.cur + 1);
+  art.all = false;
+  $("artAll").textContent = "▶ 连播全部";
+}
+artVideo.onended = artClipDone;
+artVideo.onpause = () => {
+  if (art.stopAt != null && artVideo.currentTime >= art.stopAt - 0.1) artClipDone();
+};
+
+function artStop() {
+  art.stopAt = null;
+  art.queue = [];
+  artVideo.pause();
+  art.all = false;
+  $("artAll").textContent = "▶ 连播全部";
+}
+
+// 依次播放第 from 到第 to 个音素
+function artPlay(from, to) {
+  if (!art.seq.length || recorder) return;
+  player.pause();
+  art.all = true;
+  art.end = to;
+  $("artAll").textContent = "■ 停止";
+  artSelect(from);
+}
+
+function artToggleAll() {
+  if (art.all) return artStop();
+  artPlay(0, art.seq.length - 1);
+}
+
+function go(delta) {
+  if (recorder || !list.length) return;
+  idx = (idx + delta + list.length) % list.length;
+  render(true);
+}
+
+$("drillSel").onchange = (e) => pickDrill(+e.target.value);
+$("items").onclick = (e) => { const li = e.target.closest("li"); if (li && !recorder) { idx = +li.dataset.i; render(true); } };
+$("recBtn").onclick = toggleRec;
+$("listenBtn").onclick = listen;
+$("myBtn").onclick = () => lastBlobUrl && new Audio(lastBlobUrl).play();
+$("prevBtn").onclick = () => go(-1);
+$("nextBtn").onclick = () => go(1);
+$("rate").oninput = (e) => { $("rateVal").textContent = e.target.value; try { localStorage.setItem("rate", e.target.value); } catch {} };
+$("maxTries").onchange = () => render();
+$("artWords").onclick = (e) => {
+  if (recorder) return;
+  const b = e.target.closest(".ph"), w = e.target.closest("[data-start]");
+  if (b) { artStop(); player.pause(); artSelect(+b.dataset.i); }
+  else if (w) artPlay(+w.dataset.start, +w.dataset.end);
+};
+artVideo.onclick = () => {
+  if (art.cur < 0 || recorder) return;
+  if (!artVideo.paused) { artStop(); return; }
+  player.pause();
+  artSelect(art.cur);
+};
+$("artAll").onclick = artToggleAll;
+$("artSpeed").onchange = (e) => {
+  artVideo.defaultPlaybackRate = artVideo.playbackRate = artSpeed();
+  try { localStorage.setItem("artSpeed", e.target.value); } catch {}
+};
+$("artSound").onchange = (e) => { artVideo.muted = !e.target.checked; };
+$("artFull").onchange = (e) => {
+  try { localStorage.setItem("artFull", e.target.checked ? "1" : ""); } catch {}
+  if (art.cur >= 0 && artVideo.paused) artSelect(art.cur, false);
+};
+try {
+  $("artSpeed").value = localStorage.getItem("artSpeed") || "1";
+  $("artFull").checked = !!localStorage.getItem("artFull");
+} catch {}
+$("freeGo").onclick = () => {
+  const text = $("freeText").value.trim();
+  if (!text) return;
+  const free = drills.find((d) => d.name === "自由练习") || (drills.push({ name: "自由练习", items: [] }), drills[drills.length - 1]);
+  if (!free.items.some((x) => x.target === text)) free.items.push({ target: text, hint: "" });
+  const di = drills.indexOf(free);
+  $("drillSel").innerHTML = drills.map((d, i) => `<option value="${i}">${esc(d.name)}（${d.items.length} 条）</option>`).join("");
+  $("drillSel").value = di;
+  list = free.items;
+  idx = list.findIndex((x) => x.target === text);
+  render(true);
+};
+document.addEventListener("keydown", (e) => {
+  if (["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
+  if (e.code === "Space") { e.preventDefault(); toggleRec(); }
+  else if (e.key === "l" || e.key === "L") listen();
+  else if ((e.key === "m" || e.key === "M") && lastBlobUrl) new Audio(lastBlobUrl).play();
+  else if (e.key === "p" || e.key === "P") artToggleAll();
+  else if (e.key === "ArrowRight") go(1);
+  else if (e.key === "ArrowLeft") go(-1);
+});
+init();
+</script>
+</body>
+</html>

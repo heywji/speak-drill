@@ -1,0 +1,4 @@
+# 第三关：核心技术表达跟读
+I'm testing out Claude Code right now. It's a world-renowned AI coding agent developed by Anthropic.
+I use it to program my ESP32 development board, a physical board you can plug a Type-C cable into.
+Not only is it fast, but it also bridges my knowledge gap.
