@@ -370,14 +370,16 @@ async function toggleRec() {
     return;
   }
   chunks = [];
-  recorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
+  // 旧版 iOS Safari 录不了 webm，就用浏览器默认格式（mp4），服务器那边 ffmpeg 都能转
+  const rec = new MediaRecorder(stream, MediaRecorder.isTypeSupported("audio/webm") ? { mimeType: "audio/webm" } : {});
+  recorder = rec;
   recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   recorder.onstop = () => {
     stream.getTracks().forEach((t) => t.stop());
     recorder = null;
     $("recBtn").classList.remove("recording");
     $("recBtn").textContent = "●";
-    submit(new Blob(chunks, { type: "audio/webm" }));
+    submit(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
   };
   recorder.start();
   $("recBtn").classList.add("recording");
