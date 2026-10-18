@@ -41,6 +41,7 @@ main { padding: 32px clamp(16px, 4vw, 56px); max-width: 920px; width: 100%; }
 .progress { color: var(--muted); font-size: 13px; margin-bottom: 8px; }
 .target { font-size: clamp(26px, 4vw, 40px); font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
 .hint { color: var(--muted); margin-top: 10px; }
+.hint-ipa { font-size: 26px; color: var(--text); line-height: 1.3; margin-bottom: 4px; }
 .controls { display: flex; gap: 12px; margin-top: 26px; flex-wrap: wrap; align-items: center; }
 button { font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--text);
   border-radius: 10px; padding: 10px 16px; cursor: pointer; }
@@ -54,9 +55,12 @@ button.primary { background: var(--accent); color: #fff; border-color: var(--acc
 .kbd { font-size: 12px; color: var(--muted); }
 .kbd b { border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-weight: 500; }
 .status { margin-top: 18px; min-height: 24px; color: var(--muted); }
-.tries { display: flex; gap: 6px; margin-left: auto; }
-.tries span { width: 26px; height: 6px; border-radius: 3px; background: var(--line); }
+.progress { white-space: nowrap; }
+.tries { display: flex; gap: 4px; margin-left: auto; align-items: center; min-width: 0; margin-bottom: 8px; }
+.tries span { width: 12px; height: 6px; border-radius: 3px; background: var(--line); flex: none; }
 .tries span.pass { background: var(--ok); } .tries span.fail { background: var(--bad); }
+.tries .count { width: auto; height: auto; background: none; font-size: 12px; color: var(--muted); margin-left: 4px; white-space: nowrap; }
+.att-play { margin-left: auto; padding: 1px 8px; font-size: 14px; border-color: transparent; background: transparent; }
 .attempts { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
 .attempt { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
 .attempt.ok { background: var(--ok-bg); border-color: transparent; }
@@ -140,9 +144,13 @@ main { display: grid; gap: 20px; align-content: start; }
     <div class="side-sec">
       <label>领读语速：<span id="rateVal">150</span> 词/分钟</label>
       <input type="range" id="rate" min="90" max="220" step="10" value="150" style="width:100%">
-      <label style="margin-top:10px">每条最多尝试</label>
-      <div class="row"><input type="text" id="maxTries" value="3" style="width:60px"> <span class="small" id="maxTriesNote">次没读对就送去分析</span></div>
+      <div id="autoSec">
+        <label style="margin-top:10px" id="autoLabel"></label>
+        <input type="range" id="autoN" min="0" max="10" step="1" value="3" style="width:100%">
+        <p class="small" style="margin:4px 0 0">尝试次数不限；拖到最左边是不自动，随时可以点「让 Gemini 分析」。</p>
+      </div>
       <p class="small" id="session"></p>
+      <a class="small" href="/logout" id="logout" hidden>退出登录</a>
     </div>
   </aside>
 
@@ -159,13 +167,14 @@ main { display: grid; gap: 20px; align-content: start; }
         <button id="myBtn" disabled>▶ 听我读的</button>
         <button id="prevBtn">← 上一条</button>
         <button id="nextBtn">下一条 →</button>
+        <button id="anaBtn" disabled title="把最近几次录音发给 Gemini 找具体问题">🔍 让 Gemini 分析</button>
       </div>
       <div class="kbd" style="margin-top:10px">
         <b>空格</b> 录音/结束 · <b>L</b> 听一遍 · <b>M</b> 听我读的 · <b>P</b> 口型连播 · <b>←</b><b>→</b> 切换
       </div>
       <div class="status" id="status"></div>
-      <div class="attempts" id="attempts"></div>
       <div class="analysis" id="analysis" hidden></div>
+      <div class="attempts" id="attempts"></div>
     </div>
 
     <section class="card art">
@@ -199,29 +208,69 @@ main { display: grid; gap: 20px; align-content: start; }
 
 <script>
 const $ = (id) => document.getElementById(id);
+// 部署到服务器时有登录：会话过期后接口回 401，直接回登录页
+const _fetch = window.fetch.bind(window);
+window.fetch = async (...args) => {
+  const r = await _fetch(...args);
+  if (r.status === 401) location.href = "/login";
+  return r;
+};
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 
 let drills = [];
 let list = [];          // 当前练习的条目 [{target, hint}]
 let idx = 0;
-const state = new Map(); // target -> {attempts:[], status, analysis, analyzing, error}
+const state = new Map(); // target -> {attempts:[], passed, autoDone, analysis, analyzing, error}
 let recorder = null, chunks = [], lastBlobUrl = null, busy = false;
 let analyzeOn = true;    // 服务端没配置 AI 分析时为 false
+const recPlayer = new Audio(); // 回放自己的录音
 
 function st(item) {
-  if (!state.has(item.target)) state.set(item.target, { attempts: [], status: "", analysis: "", analyzing: false });
+  if (!state.has(item.target)) state.set(item.target, { attempts: [], passed: false, autoDone: false, analysis: "", analyzing: false });
   return state.get(item.target);
 }
-const maxTries = () => Math.max(1, parseInt($("maxTries").value) || 3);
+// 尝试次数不限；连续读错 autoN 次自动送去分析一次（0 = 不自动）
+const autoN = () => +$("autoN").value;
 const rate = () => $("rate").value;
 
+function tailFails(s) {
+  let n = 0;
+  for (let i = s.attempts.length - 1; i >= 0 && !s.attempts[i].ok; i--) n++;
+  return n;
+}
+
+function itemStatus(s) {
+  if (s.passed) return "pass";
+  if (s.autoDone) return "fail";
+  return s.attempts.length ? "trying" : "";
+}
+
+function renderAutoLabel() {
+  $("autoLabel").innerHTML = autoN() ? `连续读错 <b>${autoN()}</b> 次后自动发给 Gemini 分析` : "不自动发给 Gemini 分析";
+}
+
+function playRec(url) {
+  if (!url) return;
+  player.pause();
+  artStop();
+  recPlayer.pause();
+  recPlayer.src = url;
+  recPlayer.play().catch(() => {});
+}
+
 async function init() {
-  try { $("rate").value = localStorage.getItem("rate") || 150; } catch {}
+  try {
+    $("rate").value = localStorage.getItem("rate") || 150;
+    $("autoN").value = localStorage.getItem("autoN") ?? 3;
+  } catch {}
   $("rateVal").textContent = rate();
+  renderAutoLabel();
   const r = await fetch("/api/drills").then((r) => r.json());
   drills = r.drills;
   analyzeOn = r.analyze !== false;
-  if (!analyzeOn) $("maxTriesNote").textContent = "次（没配置 AI 分析，只做识别比对）";
+  $("autoSec").hidden = !analyzeOn;
+  $("anaBtn").hidden = !analyzeOn;
+  $("logout").hidden = !r.auth;
   $("session").textContent = "录音保存在 " + r.session;
   $("drillSel").innerHTML = drills.map((d, i) => `<option value="${i}">${esc(d.name)}（${d.items.length} 条）</option>`).join("");
   pickDrill(0);
@@ -236,8 +285,7 @@ function pickDrill(i) {
 
 function renderList() {
   $("items").innerHTML = list.map((it, i) => {
-    const s = st(it);
-    const cls = s.status || (s.attempts.length ? "trying" : "");
+    const cls = itemStatus(st(it));
     return `<li class="${i === idx ? "active" : ""}" data-i="${i}"><span class="dot ${cls}"></span>${esc(it.target)}</li>`;
   }).join("");
 }
@@ -248,18 +296,24 @@ function render(speak = false) {
   const s = st(it);
   $("progress").textContent = `第 ${idx + 1} / ${list.length} 条`;
   $("target").textContent = it.target;
-  $("hint").textContent = it.hint || "";
-  $("tries").innerHTML = Array.from({ length: maxTries() }, (_, i) => {
-    const a = s.attempts[i];
-    return `<span class="${a ? (a.ok ? "pass" : "fail") : ""}"></span>`;
-  }).join("");
+  // 提示开头的 /音标/ 单独一行放大，后面是要领
+  const m = (it.hint || "").match(/^\s*(\/[^/]+\/)\s*([\s\S]*)$/);
+  $("hint").innerHTML = m && !/[一-鿿]/.test(m[1])
+    ? `<div class="hint-ipa ipa">${esc(m[1])}</div><div>${esc(m[2])}</div>`
+    : esc(it.hint || "");
+  // 只画最近 20 次，次数多了也不会撑破
+  const recent = s.attempts.slice(-20);
+  $("tries").innerHTML = recent.map((a) => `<span class="${a.ok ? "pass" : "fail"}"></span>`).join("")
+    + (s.attempts.length ? `<span class="count">共 ${s.attempts.length} 次</span>` : "");
 
+  // 最新的一次放最上面；每次都能回放自己的录音
   $("attempts").innerHTML = s.attempts.map((a, i) => `
     <div class="attempt ${a.ok ? "ok" : "bad"}">
-      <div class="head">第 ${i + 1} 次 · ${a.ok ? "✔ 通过" : `✘ 词错率 ${Math.round(a.wer * 100)}%`}</div>
+      <div class="head">第 ${i + 1} 次 · ${a.ok ? "✔ 通过" : `✘ 词错率 ${Math.round(a.wer * 100)}%`}
+        ${a.audio ? `<button class="att-play" data-k="${i}" title="听这次的录音">🔊</button>` : ""}</div>
       <div class="heard">识别为：“${esc(a.heard || "（没听到）")}”</div>
       ${a.ok ? "" : `<div class="diff">${diffHtml(a.ops)}</div>`}
-    </div>`).join("");
+    </div>`).reverse().join("");
 
   const an = $("analysis");
   if (s.analyzing) {
@@ -276,11 +330,10 @@ function render(speak = false) {
     an.hidden = true;
   }
 
-  const done = s.status === "pass" || s.attempts.length >= maxTries();
   $("recBtn").disabled = busy;
+  $("anaBtn").disabled = !s.attempts.length || s.analyzing;
   if (!recorder) {
-    $("status").innerHTML = s.status === "pass" ? `<span style="color:var(--ok)">读对了！按 → 进下一条</span>`
-      : done ? "已用完尝试次数，可以按空格继续练（不再计数）"
+    $("status").innerHTML = s.passed ? `<span style="color:var(--ok)">读对了！按 → 进下一条，也可以接着练</span>`
       : "按空格或红色按钮开始录音，读完再按一次。";
   }
   renderList();
@@ -340,8 +393,7 @@ async function toggleRec() {
 
 async function submit(blob) {
   const it = list[idx], s = st(it), myIdx = idx;
-  if (lastBlobUrl) URL.revokeObjectURL(lastBlobUrl);
-  lastBlobUrl = URL.createObjectURL(blob);
+  lastBlobUrl = URL.createObjectURL(blob); // 不回收：每次尝试都要能回放
   $("myBtn").disabled = false;
   busy = true;
   $("recBtn").disabled = true;
@@ -350,15 +402,14 @@ async function submit(blob) {
     const r = await fetch(`/api/check?target=${encodeURIComponent(it.target)}`, { method: "POST", body: blob });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    const counted = s.status !== "pass" && s.attempts.length < maxTries();
-    if (counted) s.attempts.push(d);
-    else s.attempts.splice(s.attempts.length - 1, 1, d); // 次数用完后的练习只显示最新一次
-    if (d.ok && s.status !== "fail") s.status = "pass";
-    else if (counted && s.attempts.length >= maxTries() && !d.ok) {
-      s.status = "fail";
+    d.audio = lastBlobUrl;
+    s.attempts.push(d);
+    if (d.ok) s.passed = true;
+    else if (analyzeOn && autoN() && !s.passed && !s.autoDone && tailFails(s) >= autoN()) {
+      s.autoDone = true; // 每条只自动分析一次，之后要再分析就手动点
       busy = false;
       if (idx === myIdx) render();
-      if (analyzeOn) runAnalysis(it);
+      runAnalysis(it);
       return;
     }
   } catch (e) {
@@ -373,14 +424,17 @@ async function submit(blob) {
 
 async function runAnalysis(it = list[idx]) {
   const s = st(it);
-  const last = s.attempts[s.attempts.length - 1];
+  if (!s.attempts.length || s.analyzing) return;
+  // 发最后一次的录音 + 最近几次的识别结果（自动分析的次数，最多 10 次）
+  const recent = s.attempts.slice(-Math.min(10, autoN() || 3));
+  const last = recent[recent.length - 1];
   s.analyzing = true; s.error = "";
   render();
   try {
     const r = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wav: last.wav, target: it.target, hint: it.hint || "", attempts: s.attempts.map((a) => a.heard) }),
+      body: JSON.stringify({ wav: last.wav, target: it.target, hint: it.hint || "", attempts: recent.map((a) => a.heard) }),
     });
     const d = await r.json();
     if (d.error) throw new Error(d.error);
@@ -530,11 +584,19 @@ $("drillSel").onchange = (e) => pickDrill(+e.target.value);
 $("items").onclick = (e) => { const li = e.target.closest("li"); if (li && !recorder) { idx = +li.dataset.i; render(true); } };
 $("recBtn").onclick = toggleRec;
 $("listenBtn").onclick = listen;
-$("myBtn").onclick = () => lastBlobUrl && new Audio(lastBlobUrl).play();
+$("myBtn").onclick = () => playRec(lastBlobUrl);
+$("anaBtn").onclick = () => runAnalysis();
+$("attempts").onclick = (e) => {
+  const b = e.target.closest(".att-play");
+  if (b && !recorder) playRec(st(list[idx]).attempts[+b.dataset.k]?.audio);
+};
 $("prevBtn").onclick = () => go(-1);
 $("nextBtn").onclick = () => go(1);
 $("rate").oninput = (e) => { $("rateVal").textContent = e.target.value; try { localStorage.setItem("rate", e.target.value); } catch {} };
-$("maxTries").onchange = () => render();
+$("autoN").oninput = (e) => {
+  renderAutoLabel();
+  try { localStorage.setItem("autoN", e.target.value); } catch {}
+};
 $("artWords").onclick = (e) => {
   if (recorder) return;
   const b = e.target.closest(".ph"), w = e.target.closest("[data-start]");
@@ -577,7 +639,7 @@ document.addEventListener("keydown", (e) => {
   if (["TEXTAREA", "INPUT", "SELECT"].includes(document.activeElement.tagName)) return;
   if (e.code === "Space") { e.preventDefault(); toggleRec(); }
   else if (e.key === "l" || e.key === "L") listen();
-  else if ((e.key === "m" || e.key === "M") && lastBlobUrl) new Audio(lastBlobUrl).play();
+  else if (e.key === "m" || e.key === "M") playRec(lastBlobUrl);
   else if (e.key === "p" || e.key === "P") artToggleAll();
   else if (e.key === "ArrowRight") go(1);
   else if (e.key === "ArrowLeft") go(-1);

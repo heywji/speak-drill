@@ -1,4 +1,4 @@
-# 第三关：核心技术表达跟读
-I'm testing out Claude Code right now. It's a world-renowned AI coding agent developed by Anthropic.
-I use it to program my ESP32 development board, a physical board you can plug a Type-C cable into.
-Not only is it fast, but it also bridges my knowledge gap.
+# 第三关：核心技术表达跟读。提示里的连读、弱读、浊化规则来自 Be言究英语课堂笔记
+I'm testing out Claude Code right now. It's a world-renowned AI coding agent developed by Anthropic. | 连读：testing out → tes-ting-out，It's a → It-sa；testing 的 st 浊化，t 听起来像 d（s+t/k/p = d/g/b）；AI 按字母读 /eɪ aɪ/；renowned 重音在后 re-NOWNED；developed 重音在 VEL（da-DA-da-da），-ed 读 /t/；Anthropic 重音在 THRO
+I use it to program my ESP32 development board, a physical board you can plug a Type-C cable into. | 连读：use it → u-zit，plug a → plu-ga，cable into → ca-ble-into；program 重音在前 PRO-gram；ESP32 按字母读 /iː es piː/，thirty 的 t 在美式里轻弹成 [d]；development 重音在 VEL；physical 重音在前 PHY-si-cal，后两个音节弱读成 da
+Not only is it fast, but it also bridges my knowledge gap. | 连读：is it → i-zit，but it also → bu-ti-tal-so（美式里夹在元音之间的 t 轻弹成 [d]）；fast 的 a 美式读 /æ/、英式读 /ɑː/；knowledge 的 k 不发音，重音在前 KNOW-ledge，-ledge 弱读成 /lɪdʒ/；bridges 的 -es 读 /ɪz/

@@ -1,12 +1,15 @@
 [project]
 name = "speak-drill"
 version = "0.1.0"
-description = "英语跟读发音练习：say 领读 → 你读 → 本地 Whisper 逐词比对，配口腔侧剖面发音动画"
+description = "英语跟读发音练习：电脑领读 → 你读 → 本地 Whisper 逐词比对，配口腔侧剖面发音动画"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "mlx-whisper>=0.4",
-    "sounddevice>=0.4",
+    # macOS：mlx-whisper 识别 + 系统 say 领读；Linux（服务器容器）：faster-whisper + Kokoro
+    "mlx-whisper>=0.4; sys_platform == 'darwin'",
+    "sounddevice>=0.4; sys_platform == 'darwin'",
+    "faster-whisper>=1.1; sys_platform == 'linux'",
+    "kokoro-onnx>=0.4; sys_platform == 'linux'",
     "numpy",
     "requests",
     "cmudict>=1.1.3",

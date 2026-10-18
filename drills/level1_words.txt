@@ -1,11 +1,12 @@
 # 第一关：10 个"空耳"技术词。格式：目标文本 | 发音提示（可省略）
-Claude Code | /klɔːd kəʊd/ 不要读成 cow coat / call coat；/ɔː/ 长音，/əʊ/ 饱满，词尾浊音 /d/
-Anthropic | /ænˈθrɒpɪk/ 首音节 /æn/ 不吞，/θ/ 咬舌吹气，重音在 THRO
-Type-C cable | /taɪp siː ˈkeɪbəl/ 不要读成 top C capper；/aɪ/ /eɪ/ 要滑向 /ɪ/
-hardware | /ˈhɑːdweər/ 不要读成 hot wheel；/hɑːd/ 尾音浊 /d/，后半 /weər/
-token usage | /ˈtəʊkən ˈjuːsɪdʒ/ 不要读成 talking use age；usage 重音在第一音节
-created | /kriˈeɪtɪd/ 不要读成 credit；/eɪ/ 拉长，重音在第二音节
-repo | /ˈriːpəʊ/ 不要读成 ripple；/iː/ 长音，尾音 /əʊ/
-format | /ˈfɔːmæt/ 不要读成 for March；重音在 FOR，尾音清脆 /t/
-ADB | /ˌeɪ diː ˈbiː/ 不要读成 ATP；D、B 声带振动
-command by command | /kəˈmɑːnd baɪ kəˈmɑːnd/ 重音在 MAND，/n/ 后紧跟 /d/
+# 提示里的规则来自 Be言究英语课堂笔记：DA/da 表示重读/弱读，弱读的元音读成 /ə/；长音靠"气"，短音靠"劲"
+Claude Code | /klɔːd kəʊd/ au 读 /ɔː/（同 naughty、awesome、talk）：长元音靠"气"，双唇收圆、拉长；code 的 /əʊ/ 从 ə 滑到 ʊ，口型由松到圆；两个词尾 /d/ 是浊音，轻轻带出来别吞。不要读成 cow coat / call coat
+Anthropic | /ænˈθrɒpɪk/ 老师的长词公式"从右往左定重音"：-ic 结尾，重音落在它前一个音节 THRO（da-DA-da）；首音节 /æn/ 开口大、别吞；/θ/ 舌尖放在上下齿之间吹气；-pic 弱读、短促
+Type-C cable | /taɪp siː ˈkeɪbəl/ 开音节：type 的 y 读 /aɪ/（同 like、bike），cable 的 a 读 /eɪ/（同 cake、late），两个双元音都要滑到 /ɪ/；C 是长元音 /iː/；-ble 弱读成 /bəl/。不要读成 top C capper
+hardware | /ˈhɑːdweə/ 重音在前 HARD-ware（DA-da）；/ɑː/ 长元音，嘴张大、气拉长——长短元音是不同的词，读短了就成了 hot；/d/ 后面直接接 /w/，中间不停顿。不要读成 hot wheel
+token usage | /ˈtəʊkən ˈjuːsɪdʒ/ 两个词都是重音在前（DA-da DA-da）；token 的 o 是开音节，读 /əʊ/（同 coke、smoke），-ken 弱读成 /kən/；usage 的 u 读 /juː/（同 pure），-age 弱读成 /ɪdʒ/。不要读成 talking use age
+created | /kriˈeɪtɪd/ 重音在第二个音节 cre-A-ted（da-DA-da）；/eɪ/ 拉长饱满（a_e 开音节，同 late）；美式里 t 夹在重读元音和弱读音节之间，会轻弹成 [d]。不要读成 credit（credit 重音在前，元音是短 /e/）
+repo | /ˈriːpəʊ/ 重音在前 RE-po；/iː/ 长元音靠"气"，嘴角展开、拉长（seat /siːt/ 和 sit /sɪt/ 是两个词）；尾音 /əʊ/ 收圆。不要读成 ripple
+format | /ˈfɔːmæt/ 重音在前 FOR-mat（DA-da）；/ɔː/ 收圆、拉长；第二个 a 读 /æ/，开口大（老师：别把所有 a 都读成一个音）；尾音 /t/ 清脆。不要读成 for March
+ADB | /ˌeɪ diː ˈbiː/ 按字母读：A 是 /eɪ/，D、B 都是长元音 /iː/、声带振动；缩写的重音落在最后一个字母 B。不要读成 ATP（T、P 是清辅音，声带不振动）
+command by command | /kəˈmɑːnd baɪ kəˈmɑːnd/ com 弱读成 /kə/（da），重音在 MAND（da-DA）；/n/ 后面紧跟 /d/；by 读 /baɪ/。整句节奏 da-DA da da-DA

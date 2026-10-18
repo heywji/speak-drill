@@ -1,22 +1,24 @@
 # speak-drill
 
-英语跟读发音练习：电脑用 macOS 的 `say` 领读，你跟着读，本地 Whisper（mlx-whisper）识别后逐词比对，读错的词标出来。
+英语跟读发音练习：电脑领读，你跟着读，本地 Whisper 识别后逐词比对，读错的词标出来。
 每个音素都配了口腔侧剖面动画（辅音）和真人 MRI 视频（元音），能看到舌头、嘴唇该怎么动。
 
-只支持 macOS + Apple 芯片：领读用系统自带的 `say`，识别用 Apple 芯片上的 mlx-whisper。
+- **macOS + Apple 芯片**：领读用系统自带的 `say`，识别用 mlx-whisper，一条不到 1 秒。图形界面和命令行都能用。
+- **Linux**（比如放在服务器上用）：领读用 [Kokoro](https://github.com/thewh1teagle/kokoro-onnx)（离线神经网络 TTS，默认英音女声），
+  识别用 [faster-whisper](https://github.com/SYSTRAN/faster-whisper)（CPU）。只支持图形界面，见下面的「服务器 / 容器」。
 
 ## 安装
 
 需要 [uv](https://docs.astral.sh/uv/) 和 ffmpeg：
 
 ```bash
-brew install ffmpeg
+brew install ffmpeg          # Linux：apt install ffmpeg
 git clone https://github.com/heywji/speak-drill.git
 cd speak-drill
 uv sync
 ```
 
-第一次识别会下载 Whisper 模型（约 500MB），第一次启动图形界面会下载发音动画视频（约 12MB），之后都离线可用。
+第一次识别会下载 Whisper 模型（约 500MB），第一次启动图形界面会下载发音动画视频（约 12MB），Linux 上还会下载 Kokoro 模型（约 90MB），之后都离线可用。
 
 ## 图形界面
 
@@ -25,8 +27,9 @@ uv run speak-drill gui      # 启动 http://127.0.0.1:8765/ 并自动打开浏�
 ```
 
 左边选关卡和条目，也可以输入任意句子做自由练习。按 **空格** 开始/结束录音，**L** 听领读，**M** 回放自己的录音，**P** 连播口型动画，**← →** 切换条目。
-读错的词会标成 ~~目标~~ → 识别结果。语速滑块和尝试次数在左下角。录音保存在 `recordings/<时间>/`（每次识别会追加一行到 `log.jsonl`）。
-服务只监听 127.0.0.1，录音在浏览器里录，第一次使用要允许麦克风权限。
+读错的词会标成 ~~目标~~ → 识别结果。尝试次数不限，最新的一次在最上面，每次旁边的 🔊 可以回放那一次的录音。
+语速滑块在左下角。录音保存在 `recordings/<时间>/`（每次识别会追加一行到 `log.jsonl`）。
+服务默认只监听 127.0.0.1，录音在浏览器里录，第一次使用要允许麦克风权限。
 
 ### 发音动画
 
@@ -41,6 +44,23 @@ uv run speak-drill gui      # 启动 http://127.0.0.1:8765/ 并自动打开浏�
 
 视频不在仓库里：第一次启动时从 Seeing Speech 下载到 `~/.cache/speak-drill/seeingspeech/`，只在本机播放。
 它的授权是 [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/)，只能非商业使用，页面上会署名。
+
+## 服务器 / 容器
+
+[`deploy/Containerfile`](deploy/Containerfile) 构建 Linux 版镜像（Kokoro + faster-whisper），数据（录音、模型缓存）都在 `/data`：
+
+```bash
+podman build -t speak-drill -f deploy/Containerfile .      # docker 也行
+podman run -d --name speak-drill -p 127.0.0.1:8080:8080 -v ./data:/data \
+  -e SPEAK_DRILL_PASSWORD=换成你的密码 speak-drill
+```
+
+- 设了 `SPEAK_DRILL_PASSWORD` 就要登录（签名 Cookie，30 天有效；同一 IP 15 分钟内输错 10 次先锁住）；不设就不用登录，只适合本机用。
+- **浏览器只在 https（或 localhost）下允许录音**，放到公网要在前面加一层 https 反代，比如 Caddy、Cloudflare Tunnel。
+- 登录失败按 `CF-Connecting-IP` 头计 IP（经 Cloudflare 进来时它是真实地址），没有就用连接地址。不经 Cloudflare 时，
+  反代要用真实客户端地址覆盖这个头（Caddy：`header_up CF-Connecting-IP {remote_host}`），不然客户端能伪造它绕过锁定。
+- 容器内存给 2GB 够用（Whisper + Kokoro 加载后约 1.2GB）。CPU 上识别比 Apple 芯片慢得多：Whisper 不管录音多短都按
+  30 秒窗口算，老一点的 4 核服务器上每条大约 4–5 秒。
 
 ## 双击打开
 
@@ -76,13 +96,15 @@ Anthropic | /ænˈθrɒpɪk/ 首音节 /æn/ 不吞，/θ/ 咬舌吹气，重音
 
 ## AI 分析（开源版没接）
 
-原版在同一条 3 次都没读对时，会把最后一次录音 + 3 次识别结果发给大模型，让它指出具体是哪个音素、重音或连读出了问题。
+原版在同一条连续读错几次（左下角滑块设，也能随时手动点）后，会把最后一次录音 + 最近几次识别结果发给大模型，让它指出具体是哪个音素、重音或连读出了问题。
 那部分接的是作者自己的服务，开源版把 token 和调用都注释掉了，所以只做 Whisper 比对。
 想接自己的模型，看 [`speak_drill/analyze.py`](speak_drill/analyze.py)：提示词已经写好，实现发送录音的那几行，再让 `enabled()` 返回 True 就行。
 
 ## 其他选项
 
-- `--asr-model` 换 Whisper 模型（默认 `mlx-community/whisper-small.en-mlx`）。
+- `--asr-model` 换 Whisper 模型（macOS 默认 `mlx-community/whisper-small.en-mlx`，Linux 默认 `small.en`）。
+- `SPEAK_DRILL_VOICE` 换 Kokoro 的声音（默认英音女声 `bf_emma`；`bm_george` 英音男声，`af_heart` 美音）。
+- `SPEAK_DRILL_TTS`（`say` / `kokoro`）、`SPEAK_DRILL_ASR`（`mlx` / `faster`）强制指定领读和识别后端，默认按系统自动选。
 - 只测识别和比对：
 
   ```bash

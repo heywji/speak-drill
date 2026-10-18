@@ -106,13 +106,13 @@ def cmd_check(args) -> None:
 def cmd_gui(args) -> None:
     from .server import serve
 
-    serve(Path(args.drills), Path(args.out), args.asr_model, args.gemini_model, args.port, not args.no_browser)
+    serve(Path(args.drills), Path(args.out), args.asr_model, args.gemini_model, args.port, not args.no_browser, args.host)
 
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="speak-drill", description="跟读发音练习")
     p.add_argument("--rate", type=int, default=150, help="say 语速（词/分钟），默认 150")
-    p.add_argument("--asr-model", default=asr.DEFAULT_MODEL, help="mlx-whisper 模型")
+    p.add_argument("--asr-model", default=asr.DEFAULT_MODEL, help="Whisper 模型（macOS 用 mlx，Linux 用 faster-whisper）")
     p.add_argument("--gemini-model", default=analyze.DEFAULT_MODEL)
     sub = p.add_subparsers(dest="cmd", required=True)
 
@@ -136,6 +136,7 @@ def main() -> None:
     g.add_argument("--drills", default=str(Path(__file__).resolve().parent.parent / "drills"), help="练习文件目录")
     g.add_argument("--out", default=str(Path(__file__).resolve().parent.parent / "recordings"))
     g.add_argument("--port", type=int, default=8765)
+    g.add_argument("--host", default="127.0.0.1", help="监听地址，容器里用 0.0.0.0")
     g.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     g.set_defaults(func=cmd_gui)
 

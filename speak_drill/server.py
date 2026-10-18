@@ -1,4 +1,4 @@
-"""图形界面：本地网页 + 小 HTTP 服务。浏览器负责录音和播放，这里负责 say / Whisper / 比对 / 分析。"""
+"""图形界面：网页 + 小 HTTP 服务。浏览器负责录音和播放，这里负责领读 / Whisper / 比对 / 分析。"""
 
 import datetime as dt
 import json
@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from . import analyze, articulation, asr, compare
+from . import analyze, articulation, asr, auth, compare, tts
 
 WEB_DIR = Path(__file__).parent / "web"
 _asr_lock = threading.Lock()  # mlx 不保证线程安全，识别串行
@@ -47,15 +47,6 @@ class App:
         articulation.prefetch(list(res["clips"]))
         return res
 
-    def tts(self, text: str, rate: int) -> bytes:
-        with tempfile.TemporaryDirectory() as d:
-            out = Path(d) / "say.wav"
-            subprocess.run(
-                ["say", "-r", str(rate), "--data-format=LEI16@22050", "-o", str(out), text],
-                check=True,
-            )
-            return out.read_bytes()
-
     def check(self, audio: bytes, target: str) -> dict:
         self.session.mkdir(parents=True, exist_ok=True)
         self.counter += 1
@@ -87,7 +78,7 @@ class App:
         return reply
 
 
-def make_handler(app: App):
+def make_handler(app: App, gate: auth.Auth):
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt, *args):  # 安静点
             pass
@@ -131,14 +122,56 @@ def make_handler(app: App):
         def _body(self) -> bytes:
             return self.rfile.read(int(self.headers.get("Content-Length", 0)))
 
+        def _ip(self) -> str:
+            # 经 Cloudflare Tunnel 进来时真实地址在 CF-Connecting-IP
+            return self.headers.get("CF-Connecting-IP") or self.client_address[0]
+
+        def _cookie(self, value: str, max_age: int) -> str:
+            secure = "; Secure" if self.headers.get("X-Forwarded-Proto") == "https" else ""
+            return f"{auth.COOKIE}={value}; Path=/; Max-Age={max_age}; HttpOnly; SameSite=Lax{secure}"
+
+        def _redirect(self, location: str, cookie: str = ""):
+            self.send_response(HTTPStatus.FOUND)
+            self.send_header("Location", location)
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def _allowed(self, path: str) -> bool:
+            """没登录：网页跳去登录页，接口回 401。"""
+            if path in ("/login", "/api/login", "/healthz") or gate.valid(self.headers.get("Cookie")):
+                return True
+            if path.startswith("/api/"):
+                self._json({"error": "请先登录"}, HTTPStatus.UNAUTHORIZED)
+            else:
+                self._redirect("/login")
+            return False
+
         def do_GET(self):
             url = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            if not self._allowed(url.path):
+                return
             try:
                 if url.path == "/":
                     self._send(HTTPStatus.OK, (WEB_DIR / "index.html").read_bytes(), "text/html; charset=utf-8")
+                elif url.path == "/login":
+                    if gate.enabled:
+                        self._send(HTTPStatus.OK, (WEB_DIR / "login.html").read_bytes(), "text/html; charset=utf-8")
+                    else:
+                        self._redirect("/")
+                elif url.path == "/healthz":
+                    self._json({"ok": True})
+                elif url.path == "/logout":
+                    self._redirect("/login", self._cookie("", 0))
                 elif url.path == "/api/drills":
-                    self._json({"drills": app.drills(), "session": str(app.session), "analyze": analyze.enabled()})
+                    self._json({
+                        "drills": app.drills(),
+                        "session": str(app.session),
+                        "analyze": analyze.enabled(),
+                        "auth": gate.enabled,
+                    })
                 elif url.path == "/api/phonemes":
                     self._json(app.phonemes(q.get("text", ""), q.get("hint", "")))
                 elif url.path.startswith("/api/articulation/") and url.path.endswith(".mp4"):
@@ -148,7 +181,7 @@ def make_handler(app: App):
                     else:
                         self._send_file(articulation.clip_path(ref), "video/mp4")
                 elif url.path == "/api/tts":
-                    self._send(HTTPStatus.OK, app.tts(q["text"], int(q.get("rate", 150))), "audio/wav")
+                    self._send(HTTPStatus.OK, tts.synth(q["text"], int(q.get("rate", 150))), "audio/wav")
                 else:
                     self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
             except Exception as e:
@@ -157,8 +190,25 @@ def make_handler(app: App):
         def do_POST(self):
             url = urlparse(self.path)
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
+            if not self._allowed(url.path):
+                return
             try:
-                if url.path == "/api/check":
+                if url.path == "/api/login":
+                    if not gate.enabled:
+                        self._json({"ok": True})
+                    elif gate.locked(self._ip()):
+                        self._json({"error": "错太多次了，过 15 分钟再试"}, HTTPStatus.TOO_MANY_REQUESTS)
+                    elif gate.login(self._ip(), json.loads(self._body() or b"{}").get("password", "")):
+                        body = json.dumps({"ok": True}).encode()
+                        self.send_response(HTTPStatus.OK)
+                        self.send_header("Content-Type", "application/json")
+                        self.send_header("Content-Length", str(len(body)))
+                        self.send_header("Set-Cookie", self._cookie(gate.new_session(), auth.SESSION_SECONDS))
+                        self.end_headers()
+                        self.wfile.write(body)
+                    else:
+                        self._json({"error": "密码不对"}, HTTPStatus.UNAUTHORIZED)
+                elif url.path == "/api/check":
                     self._json(app.check(self._body(), q["target"]))
                 elif url.path == "/api/analyze":
                     d = json.loads(self._body())
@@ -172,7 +222,7 @@ def make_handler(app: App):
 
 
 def _warm_up(model: str) -> None:
-    """后台先把 Whisper 模型加载好，第一次读的时候不用干等。"""
+    """后台先把 Whisper 和领读模型加载好，第一次读的时候不用干等。"""
     import numpy as np
     import wave
 
@@ -185,13 +235,18 @@ def _warm_up(model: str) -> None:
             w.writeframes(np.zeros(8000, dtype=np.int16).tobytes())
         with _asr_lock:
             asr.transcribe(p, model)
+    if tts.BACKEND == "kokoro":
+        tts.load()
 
 
-def serve(drills_dir: Path, out_dir: Path, asr_model: str, gemini_model: str, port: int, open_browser: bool) -> None:
+def serve(
+    drills_dir: Path, out_dir: Path, asr_model: str, gemini_model: str, port: int, open_browser: bool, host: str = "127.0.0.1"
+) -> None:
     app = App(drills_dir, out_dir, asr_model, gemini_model)
-    server = ThreadingHTTPServer(("127.0.0.1", port), make_handler(app))
+    gate = auth.from_env(out_dir)
+    server = ThreadingHTTPServer((host, port), make_handler(app, gate))
     url = f"http://127.0.0.1:{server.server_port}/"
-    print(f"speak-drill 图形界面：{url}  （Ctrl+C 退出）")
+    print(f"speak-drill 图形界面：{url}  （监听 {host}，{'需要登录' if gate.enabled else '不用登录'}，Ctrl+C 退出）", flush=True)
     threading.Thread(target=_warm_up, args=(asr_model,), daemon=True).start()
     articulation.prefetch(list(articulation.CLIPS))  # 全部 39 段约 12MB，下一次就离线可用
     if open_browser:
